@@ -1,0 +1,22 @@
+{
+  "name": "iot-rfid-fingerprint-server",
+  "version": "1.0.0",
+  "description": "Serveur IoT pour RFID et empreinte digitale",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "nodemon app.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "mqtt": "^4.3.8",
+    "path": "^0.12.7",
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

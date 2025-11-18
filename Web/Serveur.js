@@ -1,190 +1,67 @@
-const mqtt = require('mqtt');
+const express = require('express');
+const http = require('http');
+const socketIo = require('socket.io');
+const path = require('path');
+const MQTTHandler = require('./mqtt-handler');
 
-class MQTTHandler {
-    constructor() {
-        this.mqttClient = null;
-        // Broker public EMQX
-        this.host = 'mqtt://broker.emqx.io:1883';
-        this.sharedData = {
-            devices: {
-                rfid: [],
-                fingerprint: [],
-                status: []
-            },
-            notifications: [],
-            alerts: [],
-            commands: [],
-            lastUpdate: new Date().toISOString()
-        };
-        this.io = null; // Sera défini par app.js
+const app = express();
+const server = http.createServer(app);
+const io = socketIo(server);
+const mqttHandler = new MQTTHandler();
+
+// Middleware
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Initialisation MQTT
+mqttHandler.connect();
+mqttHandler.io = io;
+
+// Routes API
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.get('/api/data', (req, res) => {
+    res.json(mqttHandler.getSharedData());
+});
+
+app.post('/api/command', (req, res) => {
+    const { command } = req.body;
+    if (command) {
+        mqttHandler.sendCommand(command);
+        res.json({ status: 'success', message: `Commande envoyée: ${command}` });
+    } else {
+        res.status(400).json({ status: 'error', message: 'Commande manquante' });
     }
+});
 
-    connect() {
-        console.log('🔗 Connexion au broker MQTT...');
-        
-        this.mqttClient = mqtt.connect(this.host, {
-            // Client ID personnalisé et fixe pour le serveur
-            clientId: 'iot_server_rfid_1',
-            clean: true,
-            connectTimeout: 4000,
-            reconnectPeriod: 2000
-        });
-
-        this.mqttClient.on('connect', () => {
-            console.log('✅ Connecté au broker MQTT:', this.host);
-            
-            // Abonnements aux topics partagés
-            this.mqttClient.subscribe('iot/from_device/+', { qos: 0 });
-            this.mqttClient.subscribe('iot/broadcast/+', { qos: 0 });
-            this.mqttClient.subscribe('iot/to_device/+', { qos: 0 });
-            
-            console.log('📡 Abonnements MQTT activés:');
-            console.log('   - iot/from_device/+');
-            console.log('   - iot/broadcast/+');
-            console.log('   - iot/to_device/+');
-            
-            // Publier un message de statut du serveur
-            this.mqttClient.publish('iot/from_device/status', 'Serveur Node.js démarré');
-        });
-
-        this.mqttClient.on('message', (topic, message) => {
-            this.handleMessage(topic, message);
-        });
-
-        this.mqttClient.on('error', (err) => {
-            console.error('❌ Erreur MQTT:', err);
-        });
-
-        this.mqttClient.on('close', () => {
-            console.log('🔌 Connexion MQTT fermée');
-        });
-
-        this.mqttClient.on('reconnect', () => {
-            console.log('🔄 Reconnexion au broker MQTT...');
-        });
+app.post('/api/notification', (req, res) => {
+    const { message } = req.body;
+    if (message) {
+        mqttHandler.sendNotification(message);
+        res.json({ status: 'success', message: `Notification envoyée: ${message}` });
+    } else {
+        res.status(400).json({ status: 'error', message: 'Message manquant' });
     }
+});
 
-    handleMessage(topic, message) {
-        const msgStr = message.toString();
-        const timestamp = new Date().toLocaleString('fr-FR');
-        
-        console.log(`📨 [${topic}] ${msgStr}`);
+// WebSocket
+io.on('connection', (socket) => {
+    console.log('👤 Client WebSocket connecté:', socket.id);
+    socket.emit('initial-data', mqttHandler.getSharedData());
+    
+    socket.on('disconnect', () => {
+        console.log('👤 Client WebSocket déconnecté:', socket.id);
+    });
+});
 
-        const messageData = {
-            message: msgStr,
-            topic: topic,
-            timestamp: timestamp,
-            source: topic.includes('from_device') ? 'device' : 'server'
-        };
+// Démarrage du serveur
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+    console.log('🚀 Serveur IoT démarré!');
+    console.log(`📍 URL: http://localhost:${PORT}`);
+});
 
-        // Traitement selon le type de topic
-        if (topic.startsWith('iot/from_device/')) {
-            this.handleDeviceMessage(topic, msgStr, timestamp);
-        } else if (topic.startsWith('iot/broadcast/')) {
-            this.handleBroadcastMessage(topic, msgStr, timestamp);
-        }
-
-        // Mise à jour du timestamp
-        this.sharedData.lastUpdate = new Date().toISOString();
-
-        // Notification à tous les clients WebSocket
-        if (this.io) {
-            this.io.emit('mqtt-message', messageData);
-            this.io.emit('data-update', this.sharedData);
-        }
-    }
-
-    handleDeviceMessage(topic, message, timestamp) {
-        const deviceType = topic.split('/')[2]; // rfid, fingerprint, status
-        
-        if (!this.sharedData.devices[deviceType]) {
-            this.sharedData.devices[deviceType] = [];
-        }
-
-        const data = {
-            value: message,
-            timestamp: timestamp,
-            type: deviceType
-        };
-
-        // Ajouter au début du tableau
-        this.sharedData.devices[deviceType].unshift(data);
-        
-        // Limiter l'historique à 50 entrées
-        if (this.sharedData.devices[deviceType].length > 50) {
-            this.sharedData.devices[deviceType].pop();
-        }
-
-        console.log(`📱 ${deviceType.toUpperCase()}: ${message}`);
-    }
-
-    handleBroadcastMessage(topic, message, timestamp) {
-        const broadcastType = topic.split('/')[2]; // notifications, alerts
-        
-        if (!this.sharedData[broadcastType]) {
-            this.sharedData[broadcastType] = [];
-        }
-
-        this.sharedData[broadcastType].unshift({
-            message: message,
-            timestamp: timestamp,
-            type: broadcastType
-        });
-
-        // Limiter l'historique
-        if (this.sharedData[broadcastType].length > 100) {
-            this.sharedData[broadcastType].pop();
-        }
-
-        console.log(`📢 ${broadcastType.toUpperCase()}: ${message}`);
-    }
-
-    // Méthodes d'envoi
-    sendCommand(command) {
-        if (this.mqttClient && this.mqttClient.connected) {
-            this.mqttClient.publish('iot/to_device/commands', command);
-            
-            // Ajouter à l'historique des commandes
-            this.sharedData.commands.unshift({
-                command: command,
-                timestamp: new Date().toLocaleString('fr-FR'),
-                direction: 'outgoing'
-            });
-            
-            console.log(`📤 Commande envoyée: ${command}`);
-            return true;
-        } else {
-            console.error('❌ MQTT non connecté - Impossible d\'envoyer la commande');
-            return false;
-        }
-    }
-
-    sendNotification(message) {
-        if (this.mqttClient && this.mqttClient.connected) {
-            this.mqttClient.publish('iot/broadcast/notifications', message);
-            console.log(`💬 Notification: ${message}`);
-            return true;
-        }
-        return false;
-    }
-
-    sendAlert(message) {
-        if (this.mqttClient && this.mqttClient.connected) {
-            this.mqttClient.publish('iot/broadcast/alerts', message);
-            console.log(`🚨 Alerte: ${message}`);
-            return true;
-        }
-        return false;
-    }
-
-    getSharedData() {
-        return this.sharedData;
-    }
-
-    // Statut de la connexion
-    isConnected() {
-        return this.mqttClient && this.mqttClient.connected;
-    }
-}
-
-module.exports = MQTTHandler;
+module.exports = app;

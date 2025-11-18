@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard IoT - RFID & Empreinte</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎛️ Dashboard IoT - Communication ESP32</h1>
+            <div class="status-bar">
+                <div id="mqtt-status" class="status offline">MQTT: Déconnecté</div>
+                <div id="websocket-status" class="status offline">WebSocket: Déconnecté</div>
+                <div id="last-update">Dernière mise à jour: --</div>
+            </div>
+        </header>
+
+        <div class="dashboard-grid">
+            <!-- Section 1: Messages de l'ESP32 -->
+            <div class="card full-width">
+                <h3>📱 MESSAGES DE LA CARTE ESP32</h3>
+                <div class="section-description">
+                    <p>Espace dédié aux messages envoyés par votre carte ESP32</p>
+                </div>
+                <div class="message-filters">
+                    <button class="filter-btn active" data-filter="all">Tous les messages ESP32</button>
+                    <button class="filter-btn" data-filter="rfid">Uniquement RFID</button>
+                    <button class="filter-btn" data-filter="fingerprint">Uniquement Empreinte</button>
+                    <button class="filter-btn" data-filter="status">Statuts ESP32</button>
+                </div>
+                <div class="esp32-messages">
+                    <div class="message-header">
+                        <span>Topic</span>
+                        <span>Message</span>
+                        <span>Heure</span>
+                    </div>
+                    <div id="esp32-message-log" class="message-log esp32-log"></div>
+                </div>
+                <div class="stats">
+                    <div class="stat-item">
+                        <span class="stat-label">Messages RFID:</span>
+                        <span id="rfid-count" class="stat-value">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Messages Empreinte:</span>
+                        <span id="fingerprint-count" class="stat-value">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Total messages:</span>
+                        <span id="total-count" class="stat-value">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 2: Réception MQTT Générale -->
+            <div class="card full-width">
+                <h3>📨 RÉCEPTION MQTT - TOUS LES MESSAGES</h3>
+                <div class="section-description">
+                    <p>Espace dédié à tous les messages MQTT reçus (ESP32, Serveur, Notifications)</p>
+                </div>
+                <div class="message-filters">
+                    <button class="filter-btn active" data-filter="mqtt-all">Tous les messages MQTT</button>
+                    <button class="filter-btn" data-filter="mqtt-device">Messages Devices</button>
+                    <button class="filter-btn" data-filter="mqtt-broadcast">Broadcasts</button>
+                    <button class="filter-btn" data-filter="mqtt-commands">Commandes</button>
+                </div>
+                <div class="mqtt-messages">
+                    <div class="message-header">
+                        <span>Source</span>
+                        <span>Topic</span>
+                        <span>Message</span>
+                        <span>Heure</span>
+                    </div>
+                    <div id="mqtt-message-log" class="message-log mqtt-log"></div>
+                </div>
+            </div>
+
+            <!-- Cartes de statut des devices -->
+            <div class="card">
+                <h3>📡 LECTEUR RFID</h3>
+                <div class="status-container">
+                    <div id="rfid-status" class="device-status waiting">
+                        <div class="value">En attente...</div>
+                        <div class="time">--:--:--</div>
+                    </div>
+                    <div class="history">
+                        <h4>Derniers scans RFID</h4>
+                        <div id="rfid-history" class="history-list"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>👆 CAPTEUR EMPREINTE</h3>
+                <div class="status-container">
+                    <div id="fingerprint-status" class="device-status waiting">
+                        <div class="value">En attente...</div>
+                        <div class="time">--:--:--</div>
+                    </div>
+                    <div class="history">
+                        <h4>Dernières empreintes</h4>
+                        <div id="fingerprint-history" class="history-list"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Commandes vers ESP32 -->
+            <div class="card commands">
+                <h3>⚙️ ENVOYER VERS ESP32</h3>
+                <div class="button-grid">
+                    <button class="btn btn-primary" data-command="scan_rfid">
+                        📡 Scanner RFID
+                    </button>
+                    <button class="btn btn-primary" data-command="scan_fingerprint">
+                        👆 Scanner Empreinte
+                    </button>
+                    <button class="btn btn-secondary" data-command="reboot">
+                        🔄 Redémarrer ESP32
+                    </button>
+                    <button class="btn btn-warning" data-command="get_status">
+                        📊 Demander Statut
+                    </button>
+                </div>
+                
+                <div class="custom-command">
+                    <h4>Commande personnalisée vers ESP32</h4>
+                    <input type="text" id="custom-command" placeholder="Ex: led_on, get_temp, etc...">
+                    <button class="btn" id="btn-send-custom">Envoyer à ESP32</button>
+                </div>
+            </div>
+
+            <!-- Envoi de messages MQTT -->
+            <div class="card">
+                <h3>💬 ENVOYER MESSAGE MQTT</h3>
+                <div class="send-message">
+                    <label for="mqtt-topic">Topic:</label>
+                    <input type="text" id="mqtt-topic" placeholder="Ex: iot/broadcast/notifications" value="iot/broadcast/notifications">
+                    <label for="mqtt-message">Message:</label>
+                    <textarea id="mqtt-message" placeholder="Votre message..."></textarea>
+                    <button class="btn btn-info" id="btn-send-mqtt">📤 Publier sur MQTT</button>
+                </div>
+            </div>
+
+            <!-- Statut de connexion -->
+            <div class="card">
+                <h3>🔗 STATUT CONNEXIONS</h3>
+                <div class="connection-status">
+                    <div class="connection-item">
+                        <span class="conn-label">Broker MQTT:</span>
+                        <span id="broker-status" class="conn-value offline">broker.emqx.io</span>
+                    </div>
+                    <div class="connection-item">
+                        <span class="conn-label">ESP32:</span>
+                        <span id="esp32-status" class="conn-value offline">Non détecté</span>
+                    </div>
+                    <div class="connection-item">
+                        <span class="conn-label">Dernier message:</span>
+                        <span id="last-message-time" class="conn-value">--:--:--</span>
+                    </div>
+                </div>
+                <button class="btn btn-secondary" id="btn-clear-all">🗑️ Effacer tous les logs</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="dashboard.js"></script>
+</body>
+</html>
