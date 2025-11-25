@@ -22,7 +22,8 @@ class MQTTHandler {
         console.log('🔗 Connexion au broker MQTT...');
         
         this.mqttClient = mqtt.connect(this.host, {
-            clientId: 'iot_server_rfid_1',
+            // Client ID personnalisé (fixe) demandé : "IoCours"
+            clientId: 'IoCours',
             clean: true,
             connectTimeout: 4000,
             reconnectPeriod: 2000
@@ -34,7 +35,11 @@ class MQTTHandler {
             this.mqttClient.subscribe('iot/from_device/+', { qos: 0 });
             this.mqttClient.subscribe('iot/broadcast/+', { qos: 0 });
             this.mqttClient.subscribe('iot/to_device/+', { qos: 0 });
-            
+
+            // Abonnement au topic mqttx_e5db9327 et ses sous-topics
+            this.mqttClient.subscribe('mqttx_e5db9327', { qos: 0 });
+            this.mqttClient.subscribe('mqttx_e5db9327/#', { qos: 0 });
+
             console.log('📡 Abonnements MQTT activés');
         });
 
@@ -57,7 +62,8 @@ class MQTTHandler {
             message: msgStr,
             topic: topic,
             timestamp: timestamp,
-            source: topic.includes('from_device') ? 'device' : 'server'
+            // Marque les messages provenant de mqttx_e5db9327 comme "external"
+            source: topic.includes('from_device') ? 'device' : (topic.startsWith('mqttx_e5db9327') ? 'external' : 'server')
         };
 
         if (topic.startsWith('iot/from_device/')) {
@@ -112,31 +118,38 @@ class MQTTHandler {
         }
     }
 
-    sendCommand(command) {
+    publishToMqtt(topic, message) {
         if (this.mqttClient && this.mqttClient.connected) {
-            this.mqttClient.publish('iot/to_device/commands', command);
-            
-            this.sharedData.commands.unshift({
-                command: command,
-                timestamp: new Date().toLocaleString('fr-FR'),
-                direction: 'outgoing'
-            });
-            
-            console.log(`📤 Commande envoyée: ${command}`);
+            this.mqttClient.publish(topic, message);
+            console.log(`📤 MQTT PUBLISH [${topic}]: ${message}`);
             return true;
         } else {
-            console.error('❌ MQTT non connecté');
+            console.error('❌ MQTT non connecté - Impossible de publier');
             return false;
         }
     }
 
+    // Modifie sendNotification pour conserver l'historique
     sendNotification(message) {
         if (this.mqttClient && this.mqttClient.connected) {
             this.mqttClient.publish('iot/broadcast/notifications', message);
-            console.log(`💬 Notification: ${message}`);
+            
+            // Ajouter à l'historique
+            this.sharedData.notifications.unshift({
+                message: message,
+                timestamp: new Date().toLocaleString('fr-FR'),
+                direction: 'outgoing'
+            });
+            
+            console.log(`💬 Notification MQTT: ${message}`);
             return true;
         }
         return false;
+    }
+
+
+    sendCommandToDevice(command) {
+        return this.publishToMqtt('iot/to_device/commands', command);
     }
 
     getSharedData() {
