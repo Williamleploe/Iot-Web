@@ -522,7 +522,18 @@
             alert("MQTT déconnecté");
             return;
         }
-        client.publish(TOPIC_COMMAND, cmd);
+
+        // 1. Récupère l'ID client qui est nécessaire pour l'autorisation côté ESP32.
+        const clientId = ensureClientIdProvided();
+
+        // 2. Construit le message dans le format attendu par l'ESP32: CMD:<clientId>:<COMMAND>
+        const payload = "CMD:" + clientId + ":" + cmd;
+
+        // 3. Publie le message
+        client.publish(TOPIC_COMMAND, payload);
+    
+        // Ajoutez un log pour le debug
+        console.log(`Commande MQTT envoyée: ${TOPIC_COMMAND} -> ${payload}`);
     }
 
     function confirmClear() {
