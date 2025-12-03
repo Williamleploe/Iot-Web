@@ -1,126 +1,117 @@
-# 🚀 Partie Web – Projet IoT (RFID + Empreinte + MQTT)
+# 🚀 Interface Web – Projet IoT (RFID + Empreinte + MQTT)
 
-Cette partie du projet correspond à l’interface **web** et au **serveur local** permettant de visualiser les données venant de l’ESP32 (RFID, empreinte, servo…) et d’envoyer des commandes via MQTT.
-
-Elle s’appuie sur un serveur Node.js qui se connecte à votre broker MQTT local (ex : **MQTTX**).
+Cette interface web affiche en temps réel les événements envoyés par l’ESP32 (RFID, empreinte) et permet d’envoyer des commandes via **MQTT** (WebSockets), directement depuis le navigateur grâce à **mqtt.js**.
 
 ---
 
-## 📌 Objectifs de la partie Web
-
-La partie web doit permettre :
+# 📌 Objectifs du Dashboard Web
 
 ### 🔍 Consultation en temps réel
-- Lecture du dernier badge RFID scanné  
-- Lecture du dernier résultat du capteur d’empreinte  
-- État du servo (ouvert / fermé)  
-- Logs rapides des événements reçus du broker  
+- Dernier badge RFID détecté  
+- Dernière empreinte lue  
+- Résultat : *granted* / *denied*  
+- Historique des accès  
+- Journal complet des événements  
+- Statistiques (RFID / empreintes / refus)  
 
-### 🕹️ Contrôle à distance
-- Bouton “Ouvrir la porte” (commande MQTT vers l’ESP32)  
-- Possibilité d’étendre : reset, enregistrement empreinte…
+### 🕹️ Commandes MQTT
+- Ouvrir la porte  
+- Lister les utilisateurs  
+- Supprimer tous les utilisateurs  
+- Envoyer une commande MQTT personnalisée  
 
-### 🌐 Connexion au Broker MQTT
-- Le serveur Node.js se connecte au **broker MQTTX**  
-- La page web utilise une API interne fournie par ce serveur  
-- Tout tourne en **local**, rapide et sans internet
-
----
-
-## 🏗️ Architecture
-
-[ESP32] <----> [Broker MQTTX] <----> [Serveur Web Node.js] <----> [Dashboard Web]
-
+### 🌐 Connexion MQTT configurables
+- Host  
+- Port WebSocket (ex : 8083)  
+- Topic de souscription (ex : `auth/door/#`)  
+- Statut de connexion en temps réel  
 
 ---
 
-## 🛠️ Technologies utilisées
+# 🏗️ Architecture
 
-### Backend (serveur local)
-- Node.js  
-- Express.js  
-- mqtt.js  
+```
+[ESP32] ⇄ (MQTT) ⇄ [Broker] ⇄ (WebSocket) ⇄ [Dashboard Web]
+```
 
-### Frontend (dashboard)
-- HTML5  
-- CSS3  
-- JavaScript pur (aucune dépendance externe)
-
-### Broker
-- MQTTX (broker local)
+➡️ Le dashboard utilise **mqtt.js (version navigateur)** chargé via CDN.  
+➡️ Le broker doit avoir **WebSockets activé** (ex : MQTTX).  
 
 ---
 
-## 📁 Structure du projet
+# 🛠️ Technologies utilisées
 
+### Frontend
+- HTML  
+- CSS  
+- JavaScript  
+- mqtt.js (client WebSocket)
+
+### Broker MQTT
+- MQTTX (client + broker local)
+
+---
+
+# 📁 Structure du projet
+
+```
 /web
-│── server.js → serveur web + client MQTT
-│── package.json
-└── /public
-│── index.html → interface web
-│── style.css → styles (optionnel)
-└── script.js → logique front
+│── index.html
+└── style.css
+```
 
 ---
 
-# 🔧 Installation & Lancement
+# 🔧 Installation & Utilisation
 
-## 1️⃣ Installer Node.js  
-Télécharger : https://nodejs.org
+## 1️⃣ Activer le broker MQTT avec WebSockets
 
----
+Exemple avec **MQTTX Broker** :
 
-## 2️⃣ Installer les dépendances
-
-cd web
-npm install
-
-
-Installe :
-- express
-- mqtt
+- Host : `broker.emqx.io`
+- Port WebSocket : `8083`
+- Path : `/mqtt`
 
 ---
 
-## 3️⃣ Démarrer le broker MQTT (MQTTX)
+## 2️⃣ Ouvrir le dashboard
 
-Configurer :
-mqtt://localhost:1883
+Il suffit d’ouvrir :
 
+```
+index.html
+```
 
----
-
-## 4️⃣ Lancer le serveur web
-
-node server.js
-
+Aucune installation nécessaire.
 
 ---
 
-## 5️⃣ Accéder au dashboard web
+## 3️⃣ Configurer dans l’interface
 
-Ouvrir dans un navigateur :
+Zone **Configuration Broker MQTT** :
 
-👉 http://localhost:3000
+- Host : `broker.emqx.io`
+- Port : `8083`
+- Topic Sub : `auth/door/#`
 
-Fonctionnalités :
-- Affichage en temps réel des données MQTT  
-- Mise à jour auto  
-- Bouton pour commander le servo  
-
----
-
-## 📨 Topics MQTT utilisés
-
-| Action / Donnée       | Topic MQTT      | Direction |
-|------------------------|------------------|-----------|
-| ID RFID détecté       | `rfid/id`        | ESP32 → Serveur Web |
-| Résultat empreinte    | `finger/verify`  | ESP32 → Serveur Web |
-| État du servo         | `servo/state`    | ESP32 → Serveur Web |
-| Ouvrir la porte       | `servo/cmd`      | Serveur Web → ESP32 |
+Puis cliquer sur **Reconnexion**.
 
 ---
 
+# 📨 Topics MQTT utilisés
 
+| Utilité                | Topic                  | Direction               |
+|------------------------|------------------------|-------------------------|
+| Événement d’accès      | `auth/door/event`      | ESP32 → Dashboard       |
+| Ouvrir la porte        | `auth/door/command`    | Dashboard → ESP32       |
+| Lister utilisateurs    | `auth/door/command`    | Dashboard → ESP32       |
+| Effacer tout           | `auth/door/command`    | Dashboard → ESP32       |
 
-
+### Exemple d’événement reçu
+```json
+{
+  "method": "rfid",
+  "name": "Lucas",
+  "result": "granted"
+}
+```
